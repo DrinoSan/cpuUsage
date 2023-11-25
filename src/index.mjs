@@ -6,12 +6,14 @@ const html = htm.bind(h);
 function App(props) {
     return html`
     <div>
-    ${props.cpus.map((cpu) => {
-        return html`
-        <div> ${cpu.toFixed(2)}% usage </div> `;
+      ${props.cpus.map((cpu) => {
+        return html`<div class="bar">
+          <div class="bar-inner" style="width: ${cpu}%"></div>
+          <label>${cpu.toFixed(2)}%</label>
+        </div>`;
     })}
     </div>
-    `;
+  `;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
