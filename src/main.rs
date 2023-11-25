@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use axum::{extract::State, routing::get, Router};
+use axum::{extract::State, response::IntoResponse, routing::get, Json, Router};
 
 use sysinfo::{CpuExt, System, SystemExt};
 
@@ -27,13 +27,16 @@ struct AppState {
     sys: Arc<Mutex<System>>,
 }
 
-async fn cpus_get(State(state): State<AppState>) -> String {
+#[axum::debug_handler]
+async fn cpus_get(State(state): State<AppState>) -> impl IntoResponse {
     use std::fmt::Write;
 
     let mut s = String::new();
 
     let mut sys = state.sys.lock().unwrap();
     sys.refresh_all();
+
+    let v: Vec<_> = sys.cpus().iter().map(|cpu| cpu.cpu_usage()).collect();
 
     for (i, cpu) in sys.cpus().iter().enumerate() {
         let i = i + 1;
@@ -42,5 +45,5 @@ async fn cpus_get(State(state): State<AppState>) -> String {
         writeln!(&mut s, "CPU {i} {usage}% ").unwrap();
     }
 
-    s
+    Json(v)
 }
