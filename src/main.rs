@@ -1,13 +1,13 @@
 use std::sync::{Arc, Mutex};
 
-use axum::{extract::State, response::IntoResponse, routing::get, Json, Router};
+use axum::{extract::State, response::{IntoResponse, Html}, routing::get, Json, Router};
 
 use sysinfo::{CpuExt, System, SystemExt};
 
 #[tokio::main]
 async fn main() {
     let app = Router::new()
-        .route("/", get(|| async { "Hello World!" }))
+        .route("/", get(root_get))
         .route("/api/cpus", get(cpus_get))
         .with_state(AppState {
             sys: Arc::new(Mutex::new(System::new())),
@@ -25,6 +25,11 @@ async fn main() {
 #[derive(Clone)]
 struct AppState {
     sys: Arc<Mutex<System>>,
+}
+
+#[axum::debug_handler]
+async fn root_get() -> impl IntoResponse {
+    Html(include_str!("index.html"))
 }
 
 #[axum::debug_handler]
