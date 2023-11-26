@@ -16,16 +16,15 @@ function App(props) {
   `;
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    setInterval(async () => {
-        let response = await fetch('/api/cpus');
-        if (response.status !== 200) {
-            throw new Error('Http error! status: ${response.status}');
-        }
+let update = async () => {
+    let response = await fetch("/api/cpus");
+    if (response.status !== 200) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
-        let json = await response.json();
+    let json = await response.json();
+    render(html`<${App} cpus=${json}></${App}>`, document.body);
+};
 
-        render(html`<${App} cpus=${json}></${App}>`, document.body);
-    }, 1000);
-
-});
+update();
+setInterval(update, 200);

@@ -1,19 +1,41 @@
 use std::sync::{Arc, Mutex};
 
-use axum::{extract::State, response::{IntoResponse, Html}, routing::get, Json, Router, http::Response};
+use axum::{
+    extract::State,
+    http::Response,
+    response::{Html, IntoResponse},
+    routing::get,
+    Json, Router,
+};
 
 use sysinfo::{CpuExt, System, SystemExt};
 
 #[tokio::main]
 async fn main() {
+    let app_state = AppState::default();
+
     let app = Router::new()
         .route("/", get(root_get))
         .route("/index.mjs", get(indexmjs_get))
         .route("/index.css", get(indexcss_get))
         .route("/api/cpus", get(cpus_get))
-        .with_state(AppState {
-            sys: Arc::new(Mutex::new(System::new())),
-        });
+        .with_state(app_state.clone());
+
+    // Update CPU usage state in background
+    tokio::task::spawn_blocking(move || {
+        let mut sys = System::new();
+        loop {
+            sys.refresh_all();
+            let v: Vec<_> = sys.cpus().iter().map(|cpu| cpu.cpu_usage()).collect();
+
+            {
+                let mut cpus = app_state.cpus.lock().unwrap();
+                *cpus = v;
+            }
+
+            std::thread::sleep(System::MINIMUM_CPU_UPDATE_INTERVAL);
+        }
+    });
 
     let server =
         axum::Server::bind(&"0.0.0.0:8080".parse().unwrap()).serve(app.into_make_service());
@@ -24,21 +46,25 @@ async fn main() {
     server.await.unwrap();
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct AppState {
-    sys: Arc<Mutex<System>>,
+    cpus: Arc<Mutex<Vec<f32>>>,
 }
 
 #[axum::debug_handler]
 async fn root_get() -> impl IntoResponse {
-    let markup = tokio::fs::read_to_string("src/index.html").await.expect("Cant find index.html");
+    let markup = tokio::fs::read_to_string("src/index.html")
+        .await
+        .expect("Cant find index.html");
 
     Html(markup)
 }
 
 #[axum::debug_handler]
 async fn indexmjs_get() -> impl IntoResponse {
-    let markup = tokio::fs::read_to_string("src/index.mjs").await.expect("Cant find index.mjs");
+    let markup = tokio::fs::read_to_string("src/index.mjs")
+        .await
+        .expect("Cant find index.mjs");
 
     Response::builder()
         .header("content-type", "application/javascript;charset=utf-8")
@@ -48,7 +74,9 @@ async fn indexmjs_get() -> impl IntoResponse {
 
 #[axum::debug_handler]
 async fn indexcss_get() -> impl IntoResponse {
-    let markup = tokio::fs::read_to_string("src/index.css").await.expect("Cant find index.css");
+    let markup = tokio::fs::read_to_string("src/index.css")
+        .await
+        .expect("Cant find index.css");
 
     Response::builder()
         .header("content-type", "text/css;charset=utf-8")
@@ -58,21 +86,6 @@ async fn indexcss_get() -> impl IntoResponse {
 
 #[axum::debug_handler]
 async fn cpus_get(State(state): State<AppState>) -> impl IntoResponse {
-    use std::fmt::Write;
-
-    let mut s = String::new();
-
-    let mut sys = state.sys.lock().unwrap();
-    sys.refresh_all();
-
-    let v: Vec<_> = sys.cpus().iter().map(|cpu| cpu.cpu_usage()).collect();
-
-    for (i, cpu) in sys.cpus().iter().enumerate() {
-        let i = i + 1;
-
-        let usage = cpu.cpu_usage();
-        writeln!(&mut s, "CPU {i} {usage}% ").unwrap();
-    }
-
+    let v = state.cpus.lock().unwrap().clone();
     Json(v)
 }
